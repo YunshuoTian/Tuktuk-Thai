@@ -18,6 +18,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ text, className = '', 
         audioRef.current.pause();
         audioRef.current = null;
       }
+      window.speechSynthesis.cancel();
     };
   }, []);
 
@@ -27,16 +28,61 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ text, className = '', 
 
     setIsLoading(true);
 
-    // Simple language detection: If text contains Thai characters, use 'th', otherwise 'en'
     const isThai = /[\u0E00-\u0E7F]/.test(text);
-    const lang = isThai ? 'th' : 'en';
-    
-    // Use Google Translate TTS API (unofficial but widely supported for this use case)
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${lang}&client=tw-ob`;
+    const langCode = isThai ? 'th-TH' : 'en-US';
+
+    // STRATEGY 1: Native Browser Text-to-Speech (Web Speech API)
+    // This is the most reliable method for static apps (GitHub Pages) as it has no CORS/Network blocking.
+    if ('speechSynthesis' in window) {
+        // Cancel any pending speech
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = langCode;
+        utterance.rate = 0.9; // Slightly slower for clarity
+
+        // Handlers
+        utterance.onstart = () => {
+            setIsLoading(false);
+            setIsPlaying(true);
+        };
+
+        utterance.onend = () => {
+            setIsPlaying(false);
+            setIsLoading(false);
+        };
+
+        utterance.onerror = (err) => {
+            console.warn("Native TTS Error", err);
+            // If native fails, try the fallback
+            playFallbackAudio(isThai ? 'th' : 'en');
+        };
+
+        // Attempt to speak
+        window.speechSynthesis.speak(utterance);
+
+        // Safety timeout: If native TTS doesn't start within 0.5s (e.g. voice missing), force fallback
+        setTimeout(() => {
+            if (!window.speechSynthesis.speaking && !isPlaying && isLoading) {
+                console.log("Native TTS timeout, switching to fallback...");
+                window.speechSynthesis.cancel();
+                playFallbackAudio(isThai ? 'th' : 'en');
+            }
+        }, 500);
+        
+        return;
+    }
+
+    // STRATEGY 2: Fallback to Audio File (if Web Speech API not supported)
+    playFallbackAudio(isThai ? 'th' : 'en');
+  };
+
+  const playFallbackAudio = (lang: string) => {
+    // client=gtx is generally more permissive for external requests than tw-ob
+    const url = `https://translate.googleapis.com/translate_tts?client=gtx&ie=UTF-8&tl=${lang}&q=${encodeURIComponent(text)}`;
 
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current = null;
     }
 
     const audio = new Audio(url);
@@ -46,8 +92,9 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ text, className = '', 
       setIsLoading(false);
       setIsPlaying(true);
       audio.play().catch(err => {
-        console.error("Playback failed", err);
+        console.error("Fallback Audio playback failed", err);
         setIsPlaying(false);
+        setIsLoading(false);
       });
     };
 
@@ -57,14 +104,11 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({ text, className = '', 
     };
 
     audio.onerror = (e) => {
-      console.error("Audio load error", e);
+      console.error("Fallback Audio load error", e);
       setIsLoading(false);
       setIsPlaying(false);
-      // Fallback: If Google blocks the request (404/403), sometimes opening in new tab works, 
-      // but for an in-app experience, we just stop loading.
     };
 
-    // Trigger load
     audio.load();
   };
 

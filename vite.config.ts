@@ -4,7 +4,8 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
   // Load env file based on `mode` in the current working directory.
   // The third parameter '' allows loading all env vars, not just VITE_ prefixed ones.
-  const env = loadEnv(mode, process.cwd(), '');
+  // Cast process to any to avoid type error: Property 'cwd' does not exist on type 'Process'
+  const env = loadEnv(mode, (process as any).cwd(), '');
 
   // PRIORITY: 
   // 1. System Environment (process.env) - Used by GitHub Actions Secrets
