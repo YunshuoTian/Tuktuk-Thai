@@ -7,8 +7,9 @@ export const quickTranslate = async (text: string): Promise<{ translatedText: st
     const sourceLang = 'auto';
     const targetLang = isThaiInput ? 'en' : 'th';
     
-    // Direct URL for client-side usage (GitHub Pages)
-    // 'client=gtx' is commonly used for this unofficial access pattern
+    // Direct URL for client-side usage. 
+    // Note: This may be subject to CORS restrictions on some hosting platforms.
+    // The fallback to Gemini ensures the app remains functional if this fails.
     const baseUrl = 'https://translate.googleapis.com/translate_a/single'; 
     
     const params = new URLSearchParams();
@@ -26,12 +27,11 @@ export const quickTranslate = async (text: string): Promise<{ translatedText: st
     const data = await response.json();
     
     // Data structure from Google API is a nested array:
-    // data[0] contains the translation parts
     const translationParts = data[0];
     let translatedText = "";
     let transliteration = "";
 
-    // 1. Construct full translation (sometimes split into multiple parts)
+    // 1. Construct full translation
     if (translationParts && translationParts.length > 0) {
         translatedText = translationParts
             .map((part: any) => part[0])
@@ -40,18 +40,15 @@ export const quickTranslate = async (text: string): Promise<{ translatedText: st
     }
 
     // 2. Extract Transliteration
-    // Google puts romanization in the last element of the first array usually
     const lastPart = translationParts[translationParts.length - 1];
     
     if (isThaiInput) {
-        // If input is Thai, we want Romanization of the INPUT.
-        // It's usually at index 3 for Thai input
+        // If input is Thai, we want Romanization of the INPUT (usually index 3)
         if (lastPart && lastPart.length >= 3 && lastPart[3]) {
             transliteration = lastPart[3]; 
         } 
     } else {
-        // If input is English, target is Thai. We want Romanization of the OUTPUT.
-        // It's usually at index 2 for English input
+        // If input is English, target is Thai. We want Romanization of the OUTPUT (usually index 2)
         if (lastPart && lastPart.length >= 3 && lastPart[2]) {
              transliteration = lastPart[2];
         }
@@ -63,8 +60,8 @@ export const quickTranslate = async (text: string): Promise<{ translatedText: st
     };
 
   } catch (error) {
-    console.error("Google Translate API Error, falling back to Gemini:", error);
-    // Fallback to Gemini if Google API fails (e.g. CORS block or rate limit)
+    console.warn("Google Translate API blocked (likely CORS). Falling back to Gemini...", error);
+    // Fallback to Gemini if Google API fails (common on GitHub Pages due to CORS)
     return quickTranslateGeminiFallback(text);
   }
 };
